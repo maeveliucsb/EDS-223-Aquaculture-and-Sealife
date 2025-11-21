@@ -1,0 +1,59 @@
+---
+title: "aquaculture_analysis"
+author: 'Maeve'
+date: 11/26/25
+format: html
+editor: visual
+---
+loading in data
+
+```{r}
+#| message: false
+#| warning: false
+library(sf) # vector handling
+library(terra) # raster handling
+library(tidyverse)
+library(tmap) # map making
+library(spData) # spatial data
+library(spDataLarge) # spatial data
+library(viridisLite)
+library(raster)
+library(ggplot2)
+library(mosaic)
+library(stars)
+library(lwgeom)
+
+```
+
+# data
+```{r}
+depth <- raster(here::here("data", "depth.tif"),
+                           quiet = TRUE)
+
+bath <- raster(here::here("data", "depth.tif"),
+                           quiet = TRUE)
+
+EEZ <- st_read(here::here("data","wc_regions_clean.shp"),
+                           quiet = TRUE)
+
+aasst8 <- raster(here::here("data", "average_annual_sst_2008.tif"))
+aasst9 <- raster(here::here("data", "average_annual_sst_2009.tif"))
+aasst10 <- raster(here::here("data", "average_annual_sst_2011.tif"))
+aasst11 <- raster(here::here("data", "average_annual_sst_2010.tif"))
+aasst12 <- raster(here::here("data", "average_annual_sst_2012.tif"))
+
+```
+
+# Stack rasters
+```{r}
+stack <- c(aasst8,
+           aasst9,
+           aasst10,
+           aasst11,
+           aasst12)
+```
+
+# calculating mean
+```{r}
+passthroughmean(stack)
+```
