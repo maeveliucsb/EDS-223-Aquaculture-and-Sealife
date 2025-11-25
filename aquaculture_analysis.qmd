@@ -13,7 +13,11 @@ execute:
 toc: TRUE
 theme: journal
 ---
-```{r, echo=FALSE, out.width="70%", fig-cap="Screenshot of README"}
+```{r}
+#| echo: false
+#| out-width: "70%"
+#| fig-cap: "Screenshot of README"
+
 knitr::include_graphics("readmesc.png")
 ```
 # Introduction
