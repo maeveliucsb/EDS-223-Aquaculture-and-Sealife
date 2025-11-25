@@ -13,24 +13,16 @@ execute:
 toc: TRUE
 theme: journal
 ---
-
+```{r, echo=FALSE, out.width="70%", fig-cap="Screenshot of README"}
+knitr::include_graphics("readmesc.png")
+```
 # Introduction
 
-For this assignment, you are tasked with determining which Exclusive Economic Zones (EEZ) on the West Coast of the US are best suited to developing marine aquaculture for several species of oysters and a species of your choice. Suitable locations will be determined based on range of suitable sea surface temperature (SST) and depth values for the species.
-
-To make your workflow generalizable, you must create a function that has the following characteristics:
-
-arguments:
-minimum and maximum sea surface temperature
-minimum and maximum depth
-species name
-outputs:
-map of EEZ regions colored by amount of suitable area
-species name should be included in the map’s title
+This document analyzes aquaculture distribution as a sustainable alternative to land based meat production. For this assignment, I will determine which Exclusive Economic Zones (EEZ) on the West Coast of the US are best suited to developing marine aquaculture for several species of oysters and Geoducks, a saltwater clam with a nearly $80 million industry. Suitable locations will be determined based on range of suitable sea surface temperature (SST) and depth values for the species.
 
 
 # Load libraries
-
+These are the libraries necessary to complete the rest of the code in the document. 
 ```{r}
 library(tidyverse)
 library(sf)
@@ -41,7 +33,6 @@ library(here)
 library(dplyr)
 library(viridis)
 ```
-
 
 
 # Load data
@@ -77,7 +68,6 @@ eez <- st_read(here("data", "wc_regions_clean.shp"))
 
 ```{r}
 # Read in rasters of sea surface temerpature
-
 sst_2008 <- rast(here("data", "average_annual_sst_2008.tif"))
 sst_2009 <- rast(here("data", "average_annual_sst_2009.tif"))
 sst_2010 <- rast(here("data", "average_annual_sst_2010.tif"))
@@ -86,6 +76,7 @@ sst_2012 <- rast(here("data", "average_annual_sst_2012.tif"))
 ```
 
 ## Bathymetry
+This raster shows the varying depths of the pacific ocean
 
 ```{r}
 # read in raster for depth
@@ -94,12 +85,8 @@ bath <- rast(here("data", "depth.tif"))
 
 ## Oysters
 
--   sea surface temperature: 11-30°C
-
--   depth: 0-70 meters below sea level
-
 ## Stack rasters
-
+In this portion, I combine all 4 rasters into 1 raster called sst_stack.
 ```{r}
 # Use c() to stack
 sst_stack <- c(sst_2008, 
@@ -110,7 +97,7 @@ sst_stack <- c(sst_2008,
 ```
 
 ## Calculate mean
-
+Now I calculate the mean of each of the cell values within the stack and convert it into celcius (to capture the temperature range of the oysters)
 ```{r}
 # Get the mean of each of the cell values
 sst_mean <- terra::app(sst_stack, mean, na.rm = TRUE)
@@ -121,12 +108,12 @@ stopifnot(inherits(sst_c_mean, "SpatRaster"))   # subtract 273.15 from every cel
 ```
 
 ## Reproject bathymetry
-
+I then have to reproject my bathymetry raster and make sure that it's on the same CRS as my meaned stack of depths. 
 ```{r}
 bath_reproj <- terra::project(bath, sst_c_mean)
 ```
 
-Resample the bathymetry raster to the sea surface temperature.
+Then I resample the bathymetry raster to the sea surface temperature.
 
 ```{r}
 # Resample to SST
@@ -139,8 +126,7 @@ ext(bath_aligned) == ext(sst_c_mean)
 res(bath_aligned) == res(sst_2008)
 ```
 
-Create a matrix of oyster sea surface temperature threshold, and oyster depth range.
-
+Create a matrix of oyster sea surface temperature threshold, and oyster depth range. This gives me the tools to later use to caputre the temperature and depth ranges of the oysters.
 ```{r}
 # Matrix of SST rang
 sst_osyter_matrix <- matrix(c(
@@ -160,7 +146,7 @@ depth_oyster_matrix <- matrix(c(
 )
 ```
 
-Reclassify the raster with the matrix.
+Reclassify the raster with the matrix. This reclassifies depth and temperature data to reflect the constraints I outlined in the matrix. 
 
 ```{r}
 # Reclassify
@@ -179,7 +165,8 @@ multiplied[multiplied == 0 ] <- NA
 
 ```
 
-#making the most suitable area (for oysters?)
+# making the most suitable area (for oysters)
+This portion then amends the EEZ data to reflect the necessary conditions to make the oysters happy, it crops by the ranges specified in the multiplied raster, and re-rasterizes to make sure the conditions can still be mapped. 
 
 ```{r}
 #cropping suitable cells to EEZ
@@ -190,6 +177,7 @@ EEZrast <- rasterize(eez, multiplied_cropped, field = "area_km2")
 
 ```
 # zonal statistics
+This portion then amends the raster and maps it so that we can see visually where oysters would be the most happy and best for aquaculture. 
 ```{r}
 multiplied_cropped <- cellSize(multiplied_cropped, mask = TRUE, lyrs = FALSE, unit = 'km')
 
@@ -219,23 +207,33 @@ map1
 ```
 
 # generalizable workflow
-applying the function to geoduck (Panopea abrupta )
+
+This portion of the document applies the same workflow from the oyster to the geoduck (Panopea abrupta). Geoducks are a highly fluxuating market which is incredibly vulnerable to shocks, with prices ranging from $5-$10 per pound.
+
+Geoducks preferred conditions: 
 Preferred temperature (Ref. 115969): 5.7 - 20.6, mean 12.1 (based on 518 cells).
 depth: Benthic; depth range 0 - 110 m
 
+This portion outlines the necessary information for the following code chunks
+
 ```{r}
+#creating variables to outline geoducks preferred conditions
+
+#temperature
 min_sst <- 5.7
 max_sst <- 20.6
+#depth
 min_depth_m <- 0
 max_depth_m <- 110
+#species name (greek)
 species_name <- "Panopea abrupta"
 ```
 
-building it! 
+This portion uses the information from the oyster analysis and turns it into a function, which can be amended for a variety of animals, including but not limited to-geoducks. 
 ```{r}
-clamwork <- function(eez, #initial eez file before you did stuff
+clamwork <- function(eez, #initial eez file before you did stuff (transformed)
                              bath, #initial bath file before you transformed it 
-                             sst_mean, 
+                             sst_mean, #meaned sst file
                              min_sst, #assuming that its already cleaned
                              max_sst,
                              min_depth_m, 
@@ -319,3 +317,5 @@ clamwork(bath = bath,
          max_depth_m = max_depth_m, 
          species_name = species_name)
 ```
+# Written Reflection
+This project outlines the conditions under which effective aquaculture is necessary and sufficient to provide protein to minimize land impact of livestock animals. Aquaculture is a proposed sustainable alternative to high land use behaviors such as cattle herding or agriculture, both of which can have strong negative impacts on land. This analysis illustrates (through the analysis of two different mollusks, geoducks and oysters) the amount of suitable land for aquaculture off the west coast of the United States and finds that there is a significant amount of land which can effectively be used for aquaculture, filling a need in two very high demand industries. 
