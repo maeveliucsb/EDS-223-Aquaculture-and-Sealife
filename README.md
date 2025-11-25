@@ -6,6 +6,10 @@ I will be the sole author and contributor to this homework assignment. The assig
 
 # Data Access
 Sea Life base can be accessed here: https://www.sealifebase.ca/search.php
+
 Temperature data can be accessed here: https://coralreefwatch.noaa.gov/product/5km/index_5km_ssta.php
+
 Depth data can be accessed here: https://www.gebco.net/data-products/gridded-bathymetry-data#area
+
 EEZ data can be accessed here: Marineregions.org
+
