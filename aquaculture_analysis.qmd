@@ -39,7 +39,10 @@ library(tmap)
 library(patchwork)
 library(here)
 library(dplyr)
+library(viridis)
 ```
+
+
 
 # Load data
 
@@ -120,7 +123,6 @@ stopifnot(inherits(sst_c_mean, "SpatRaster"))   # subtract 273.15 from every cel
 ## Reproject bathymetry
 
 ```{r}
-bath <- rast(here("data", "depth.tif"))
 bath_reproj <- terra::project(bath, sst_c_mean)
 ```
 
@@ -128,7 +130,7 @@ Resample the bathymetry raster to the sea surface temperature.
 
 ```{r}
 # Resample to SST
-bath_aligned <- terra::resample(bath_reproj, sst_c_mean, method = "bilinear")
+bath_aligned <- terra::resample(bath_reproj, sst_c_mean, method = "near")
 
 # Check the extent
 ext(bath_aligned) == ext(sst_c_mean)
@@ -186,32 +188,34 @@ multiplied_cropped <- crop(multiplied, eez)
 #rasterizing
 EEZrast <- rasterize(eez, multiplied_cropped, field = "area_km2")
 
-#might be unnecessary
-suitable <- mask(multiplied_cropped, EEZrast)
 ```
 # zonal statistics
 ```{r}
+multiplied_cropped <- cellSize(multiplied_cropped, mask = TRUE, lyrs = FALSE, unit = 'km')
+
 zones_good_oysters <- terra::zonal(multiplied_cropped, 
                                    EEZrast, 
-                                   fun = "sum")
-#changing names from the inital little mess to 
+                                   fun = "sum", 
+                                   na.rm = TRUE)
+#changing names from the initial little mess to 
 zones_annotated <- cbind(eez,zones_good_oysters)
 
 zones_oysters_clean <- zones_annotated %>%
-  dplyr::select(rgn, area_km2, area_km2.1)%>%
-  rename("good oyster spots" = "area_km2.1")
+  dplyr::select(rgn, area_km2, area)%>%
+  rename("good-oyster-spots" = "area")
 
 
-map <- tm_shape(zones_oysters_clean)+
+map1 <- tm_shape(zones_oysters_clean)+
+  tm_basemap("Esri.WorldGrayCanvas") + # dull background that still has geo info
   tm_graticules()+
-  tm_polygons(fill = "good oyster spots",
-              fill.scale = tm_scale(values = mako (2)),
+  tm_polygons(fill = "good-oyster-spots",
+              fill.scale = tm_scale(values = viridis (2)),
               fill.legend = tm_legend(title = "Area of suitable oyster habitat (km2)",
                                       posititon = tm_pos_out('right'))) + 
   tm_borders(col = 'black') + 
   tm_title(text = 'suitable habitat for this species in each eez')
 
-map
+map1
 ```
 
 # generalizable workflow
@@ -229,71 +233,89 @@ species_name <- "Panopea abrupta"
 
 building it! 
 ```{r}
-climate_envelope <- function(eez, #initial eez file before you did stuff
+clamwork <- function(eez, #initial eez file before you did stuff
                              bath, #initial bath file before you transformed it 
-                             clim_var2, 
-                             sst_stack, 
+                             sst_mean, 
                              min_sst, #assuming that its already cleaned
                              max_sst,
                              min_depth_m, 
                              max_depth_m, 
                              species_name){
-  
-  species_name_lower <- species_name |> 
-    str_to_lower() |> 
-    str_replace_all(" ", "_")
-  
-  occurences_sf <- occurences |> 
-    rename(long = longitude,
-           lat = latitude) |> 
-    drop_na(long) |> 
-    st_as_sf(coords = c("long", "lat"), crs = 4326)
-  
-  occurences_bbox <- st_bbox(occurences_sf)
-  
-  clim_crop <- crop(clim_rast, occurences_bbox)
-  
-  clim_pts <- as_tibble(extract(clim_crop, occurences_sf))
-  
-  random_pts <- spatSample(clim_rast[[clim_var1]],
-                           na.rm = TRUE,
-                           size = (nrow(occurences) * 2),
-                           as.points = TRUE) |>
-    st_as_sf()
+# Globally subtract 273.15
+  sst_c_mean <- sst_mean - 273.15 
+    #reprojecting the bath crs
+  bath_reproj <- terra::project(bath, sst_c_mean)
+  # Resample to SST
+  bath_aligned <- terra::resample(bath_reproj, sst_c_mean, method = "bilinear")
 
-  clim_random_pts <- as_tibble(terra::extract(clim_crop, random_pts))
-  
-  map_1 <- tm_shape(clim_crop[[clim_var1]]) +
-    tm_raster(col.scale = tm_scale_continuous(values = "Blues")) +
-    tm_shape(occurences_sf) +
-    tm_dots(fill = "#3a5a40", size = 0.15) +
-    tm_layout(legend.position = tm_pos_in("center", "bottom"),
-              legend.orientation = "landscape",
-              legend.bg.color = "white")
+# Check the extent
+  ext(bath_aligned) = ext(sst_c_mean) 
 
-  map_2 <- tm_shape(clim_crop[[clim_var2]]) +
-    tm_raster(col.scale = tm_scale_continuous(values = "-RdYlBu")) +
-    tm_shape(occurences_sf) +
-    tm_dots(fill = "#3a5a40", size = 0.15) +
-    tm_layout(legend.position = tm_pos_in("center", "bottom"),
-              legend.orientation = "landscape",
-              legend.bg.color = "white")
+# Check the resolution
+res(bath_aligned) = res(sst_2008) 
   
-  plot_1 <- ggplot(data = clim_pts, aes_string(x = clim_var1, y = clim_var2)) +
-    geom_point(shape = 16, color = "#3a5a40") +
-    labs(title = paste("Species climate niche of", str_to_sentence(species_name))) +
-    theme_bw()
+# Matrix of SST rang
+sst_matrix <- matrix(c(
+  -Inf, min_sst, 0,
+  min_sst, max_sst, 1,
+  max_sst, Inf, 0),
+ncol = 3,
+byrow = TRUE) 
   
-  plot_2 <- ggplot(data = clim_random_pts, aes_string(x = clim_var1, y = clim_var2)) +
-    geom_point(shape = 16) +
-    labs(y = element_blank(), 
-         title = paste("Background climate of", str_to_sentence(species_name))) +
-    theme_bw()
+# Matrix of depth range
+depth_matrix <- matrix(c(
+  -Inf, min_depth_m, 0,
+  min_depth_m, max_depth_m, 1,
+  max_depth_m, Inf, 0),
+  ncol = 3,
+  byrow = TRUE
+)  
+  # Reclassify
+sst_reclassify <- classify(sst_c_mean, sst_matrix)
+bath_reclassify <- classify(bath_aligned, depth_matrix) 
+  # Multiply the reclassified rasters by eachother
+multiplied <- sst_reclassify * bath_reclassify
+  #cropping suitable cells to EEZ
+multiplied_cropped <- crop(multiplied, eez) 
+
+#rasterizing
+EEZrast <- rasterize(eez, multiplied_cropped, field = "area_km2")
+multiplied_cropped <- cellSize(multiplied_cropped, mask = TRUE, lyrs = FALSE, unit = 'km')
+
+#might be unnecessary
+suitable <- mask(multiplied_cropped, EEZrast) 
   
-  assign(paste0(species_name_lower, "_map_1"), map_1, envir = .GlobalEnv)
-  assign(paste0(species_name_lower, "_map_2"), map_2, envir = .GlobalEnv)
-  assign(paste0(species_name_lower, "_plot_1"), plot_1, envir = .GlobalEnv)
-  assign(paste0(species_name_lower, "_plot_2"), plot_2, envir = .GlobalEnv)
-  
+zones_good <- terra::zonal(multiplied_cropped, 
+                                   EEZrast, 
+                                   fun = "sum", 
+                                   na.rm = TRUE)
+
+#changing names from the inital little mess to 
+zones_annotated <- cbind(eez,zones_good)
+
+zones_clean <- zones_annotated %>%
+  dplyr::select(rgn, area_km2, area_km2.1)%>%
+  rename("good spots" = "area_km2.1") 
+
+map <- tm_shape(zones_clean)+
+  tm_basemap("Esri.WorldGrayCanvas") + # dull background that still has geo info
+  tm_graticules()+
+  tm_polygons(fill = "good spots",
+              fill.scale = tm_scale(values = viridis (2)),
+              fill.legend = tm_legend(title = "Area of suitable creature habitat (km2)",
+                                      posititon = tm_pos_out('right'))) + 
+  tm_borders(col = 'black') + 
+  tm_title(text = 'suitable habitat for this species in each eez')
+assign(paste0(species_name, "map"), map, envir = .GlobalEnv)
+map  
 }
+
+clamwork(bath = bath, 
+         eez = eez,
+         sst_mean = sst_mean,
+         min_sst = min_sst, 
+         max_sst = max_sst, 
+         min_depth_m = min_depth_m,
+         max_depth_m = max_depth_m, 
+         species_name = species_name)
 ```
