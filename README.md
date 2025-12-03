@@ -2,7 +2,7 @@ This repo reviews aquaculture as an alternative source of food provisions in the
 
 If a bug is spotted-shoot me an email (maeveli@ucsb.edu) and we can figure out together what's going on. Include the code ran, the error message recieved, and a screenshot of what you're working with. I'd appreciate it if you didn't contribute to this! Its my work for a class and a record of my process for research.
 
-I will be the sole author and contributor to this homework assignment. The assignment was written by Ruth Oliver.
+I developed this assignment with Caitlin Nordheim-Maestras and Lauren Puffer. The assignment was written by Ruth Oliver.
 
 # Data Access
 Sea Life base can be accessed here: https://www.sealifebase.ca/search.php
